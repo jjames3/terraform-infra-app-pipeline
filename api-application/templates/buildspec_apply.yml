@@ -1,0 +1,38 @@
+#This solution, non-production-ready template describes AWS Codepipeline based CICD Pipeline for terraform code deployment.
+#© 2022 Amazon Web Services, Inc. or its affiliates. All Rights Reserved.
+#This AWS Content is provided subject to the terms of the AWS Customer Agreement available at
+#http://aws.amazon.com/agreement or other written agreement between Customer and either
+#Amazon Web Services, Inc. or Amazon Web Services EMEA SARL or both.
+
+version: 0.2
+
+env:
+  variables:
+    CODE_SRC_DIR: "."
+    TF_VERSION: "1.1.6"
+    ASSUME_ROLE_ARN: "arn:aws:iam::397748281750:role/custom-role"
+    EKS_CLUSTER_NAME: "eks-cluster"
+
+phases:
+  install:
+    # runtime-versions:
+    #   python: 3.9
+    commands:
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - chmod +x ./kubectl
+      - mv -f ./kubectl /usr/local/bin/kubectl
+  build: #custom-role
+    commands:
+      - "cd ${CODEBUILD_SRC_DIR}/${CODE_SRC_DIR}"
+      - TEMP_ROLE=$(aws sts assume-role --role-arn "${ASSUME_ROLE_ARN}" --role-session-name eksauth)
+      - export TEMP_ROLE
+      - export AWS_ACCESS_KEY_ID=$(echo "${TEMP_ROLE}" | jq -r '.Credentials.AccessKeyId')
+      - export AWS_SECRET_ACCESS_KEY=$(echo "${TEMP_ROLE}" | jq -r '.Credentials.SecretAccessKey')
+      - export AWS_SESSION_TOKEN=$(echo "${TEMP_ROLE}" | jq -r '.Credentials.SessionToken')
+
+      - aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_DEFAULT_REGION}"
+      - kubectl apply -f .
+
+artifacts:
+  files:
+    - '**/*'
